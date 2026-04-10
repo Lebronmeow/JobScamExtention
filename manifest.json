@@ -2,11 +2,10 @@
   "manifest_version": 3,
   "name": "Shield: Deep Scan",
   "version": "3.0",
-  "description": "Enterprise-grade job scam detection using heuristic NLP, global domain registries, and on-device AI (Gemini Nano).",
+  "description": "Enterprise-grade job scam detection using heuristic NLP, global domain registries, and on-device AI.",
   "permissions": [
     "activeTab",
-    "scripting",
-    "aiLanguageModelOriginTrial"
+    "scripting"
   ],
   "action": {
     "default_popup": "popup.html"
