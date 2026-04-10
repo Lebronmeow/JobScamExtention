@@ -725,6 +725,109 @@
             text-decoration: none;
         }
 
+        /* ─── Settings Panel ─── */
+        .settings-panel {
+            margin-top: 16px;
+            border-top: 1px solid var(--border);
+            padding-top: 12px;
+        }
+
+        .settings-toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px 0;
+            transition: color 0.3s;
+            user-select: none;
+        }
+
+        .settings-toggle:hover { color: var(--accent-secondary); }
+
+        .settings-body {
+            margin-top: 12px;
+            animation: settingsSlide 0.3s ease;
+        }
+
+        @keyframes settingsSlide {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .settings-field-label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .key-input-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .key-input {
+            flex: 1;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-family: 'Inter', monospace;
+            font-size: 11px;
+            color: var(--text-main);
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .key-input:focus { border-color: var(--accent-secondary); }
+        .key-input::placeholder { color: var(--text-muted); }
+
+        .key-save-btn {
+            background: rgba(123, 97, 255, 0.1);
+            border: 1px solid rgba(123, 97, 255, 0.3);
+            color: var(--accent-secondary);
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-family: 'Inter', sans-serif;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            letter-spacing: 0.5px;
+        }
+
+        .key-save-btn:hover {
+            background: rgba(123, 97, 255, 0.2);
+            border-color: var(--accent-secondary);
+        }
+
+        .settings-hint {
+            font-size: 10px;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        .settings-hint a {
+            color: var(--accent-secondary);
+            text-decoration: none;
+        }
+
+        .key-status {
+            margin-top: 8px;
+            font-size: 10px;
+            font-weight: 600;
+            min-height: 14px;
+        }
+
+        .key-status.saved { color: var(--safe); }
+        .key-status.error { color: var(--crit); }
+
         /* ─── Scrollbar ─── */
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -790,9 +893,27 @@
             <h3>
                 <span class="ai-brain">🧠</span>
                 AI Deep Analysis
-                <span class="ai-badge">GEMINI NANO</span>
+                <span id="aiBadge" class="ai-badge">GEMINI</span>
             </h3>
             <div id="aiOutput" class="ai-output"></div>
+        </div>
+
+        <div class="settings-panel">
+            <div class="settings-toggle" id="settingsToggle">
+                <span>⚙</span>
+                <span class="settings-label">AI Settings</span>
+            </div>
+            <div class="settings-body" id="settingsBody" style="display: none;">
+                <label class="settings-field-label">Gemini API Key <span style="color: var(--text-muted); font-weight: 400;">(free)</span></label>
+                <div class="key-input-row">
+                    <input type="password" id="apiKeyInput" class="key-input" placeholder="Paste your API key here..." spellcheck="false" autocomplete="off">
+                    <button id="saveKeyBtn" class="key-save-btn">Save</button>
+                </div>
+                <div class="settings-hint">
+                    Get a free key from <a href="https://aistudio.google.com/apikey" target="_blank" id="aiStudioLink">Google AI Studio</a> — no credit card needed.
+                </div>
+                <div id="keyStatus" class="key-status"></div>
+            </div>
         </div>
     </div>
 

@@ -5,7 +5,8 @@
   "description": "Enterprise-grade job scam detection using heuristic NLP, global domain registries, and on-device AI.",
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "storage"
   ],
   "action": {
     "default_popup": "popup.html"

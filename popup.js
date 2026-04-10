@@ -659,81 +659,55 @@ async function executeLiveScan() {
 }
 
 // ═══════════════════════════════════════════════════════
-// CHROME BUILT-IN AI — Gemini Nano On-Device Analysis
-// Runs entirely on the user's device. Zero cost, full privacy.
-// Falls back gracefully if the API isn't available.
+// SETTINGS PANEL — API Key Management
 // ═══════════════════════════════════════════════════════
 
-async function getAIApi() {
-    // Try multiple namespaces — the API location has changed across Chrome versions
-    if (typeof chrome !== 'undefined' && chrome.aiOriginTrial && chrome.aiOriginTrial.languageModel) {
-        return chrome.aiOriginTrial.languageModel;
+document.getElementById("settingsToggle").addEventListener("click", () => {
+    const body = document.getElementById("settingsBody");
+    body.style.display = body.style.display === "none" ? "block" : "none";
+    
+    // Load existing key if saved
+    if (body.style.display === "block") {
+        chrome.storage.local.get(["geminiApiKey"], (result) => {
+            if (result.geminiApiKey) {
+                document.getElementById("apiKeyInput").value = result.geminiApiKey;
+                document.getElementById("keyStatus").textContent = "✓ Key saved";
+                document.getElementById("keyStatus").className = "key-status saved";
+            }
+        });
     }
-    if (typeof self !== 'undefined' && self.ai && self.ai.languageModel) {
-        return self.ai.languageModel;
-    }
-    if (typeof window !== 'undefined' && window.ai && window.ai.languageModel) {
-        return window.ai.languageModel;
-    }
-    return null;
-}
+});
 
-async function runAIAnalysis(jobText, heuristicScore, heuristicFlags, companyName) {
-    const aiConsole = document.getElementById("aiConsole");
-    const aiOutput = document.getElementById("aiOutput");
-
-    // Don't run AI if there's no text to analyze
-    if (!jobText || jobText.trim().length < 50) {
+document.getElementById("saveKeyBtn").addEventListener("click", () => {
+    const key = document.getElementById("apiKeyInput").value.trim();
+    const status = document.getElementById("keyStatus");
+    
+    if (!key) {
+        status.textContent = "✗ Please enter an API key";
+        status.className = "key-status error";
         return;
     }
+    
+    chrome.storage.local.set({ geminiApiKey: key }, () => {
+        status.textContent = "✓ Key saved successfully!";
+        status.className = "key-status saved";
+        setTimeout(() => { status.textContent = "✓ Key saved"; }, 2000);
+    });
+});
 
-    const aiApi = await getAIApi();
+// Handle the Google AI Studio link click
+document.getElementById("aiStudioLink").addEventListener("click", (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: "https://aistudio.google.com/apikey" });
+});
 
-    if (!aiApi) {
-        // AI not available — show informational message
-        aiConsole.style.display = "block";
-        aiOutput.innerHTML = `<div class="ai-unavailable">
-            ⚡ On-device AI analysis is available if you enable Chrome's built-in AI:<br>
-            1. Open <strong>chrome://flags/#prompt-api-for-gemini-nano</strong><br>
-            2. Set to <strong>Enabled</strong><br>
-            3. Restart Chrome<br><br>
-            This runs Gemini Nano entirely on your device — free, private, no API key needed.
-        </div>`;
-        return;
-    }
+// ═══════════════════════════════════════════════════════
+// AI ANALYSIS ENGINE — Dual Provider
+// 1. Try Chrome Built-in AI (Gemini Nano, on-device)
+// 2. Fall back to Gemini API (free tier, cloud)
+// ═══════════════════════════════════════════════════════
 
-    // Check if the model is available
-    try {
-        const capabilities = await aiApi.capabilities();
-        
-        if (capabilities.available === 'no') {
-            aiConsole.style.display = "block";
-            aiOutput.innerHTML = `<div class="ai-unavailable">
-                Gemini Nano is not supported on this device. Requires Chrome 127+ on desktop with sufficient hardware.
-            </div>`;
-            return;
-        }
-
-        // Show the console with loading state
-        aiConsole.style.display = "block";
-        aiOutput.innerHTML = `<span class="ai-status"><div class="spinner"></div> Initializing Gemini Nano on-device model...</span>`;
-
-        // If the model needs to download, show progress
-        if (capabilities.available === 'after-download') {
-            aiOutput.innerHTML = `<span class="ai-status"><div class="spinner"></div> Downloading Gemini Nano model (one-time)...</span>`;
-        }
-
-        // Create the AI session with system instructions
-        const session = await aiApi.create({
-            monitor(m) {
-                m.addEventListener('downloadprogress', (e) => {
-                    const pct = Math.round((e.loaded / e.total) * 100);
-                    aiOutput.innerHTML = `<span class="ai-status"><div class="spinner"></div> Downloading AI model: ${pct}%</span>`;
-                });
-            },
-            initialPrompts: [{
-                role: 'system',
-                content: `You are a cybersecurity expert specialized in job scam detection. You analyze job postings and provide a brief, clear verdict.
+const AI_SYSTEM_PROMPT = `You are a cybersecurity expert specialized in job scam detection. You analyze job postings and provide a brief, clear verdict.
 
 Rules:
 - Be concise (3-5 sentences max)
@@ -742,16 +716,14 @@ Rules:
 - If safe, briefly explain why
 - If suspicious/dangerous, explain what the user should watch out for
 - Never use markdown formatting, just plain text
-- Be direct and actionable — this protects real people from real scams`
-            }]
-        });
+- Be direct and actionable — this protects real people from real scams`;
 
-        // Build the prompt with context from our heuristic scan
-        const heuristicContext = heuristicFlags.length > 0 
-            ? `\n\nOur automated scan found these signals (score: ${heuristicScore}%):\n${heuristicFlags.slice(0, 8).join('\n')}`
-            : `\n\nOur automated scan found no red flags (score: 0%).`;
+function buildPrompt(jobText, heuristicScore, heuristicFlags, companyName) {
+    const heuristicContext = heuristicFlags.length > 0
+        ? `\n\nOur automated scan found these signals (score: ${heuristicScore}%):\n${heuristicFlags.slice(0, 8).join('\n')}`
+        : `\n\nOur automated scan found no red flags (score: 0%).`;
 
-        const prompt = `Analyze this job posting for scam indicators. Company: "${companyName || 'Unknown'}".${heuristicContext}
+    return `Analyze this job posting for scam indicators. Company: "${companyName || "Unknown"}".${heuristicContext}
 
 Job description text (first 1500 chars):
 """
@@ -759,42 +731,149 @@ ${jobText.substring(0, 1500)}
 """
 
 Provide your security verdict:`;
+}
 
-        // Stream the response with typing effect
-        aiOutput.innerHTML = '';
-        aiOutput.classList.add('streaming');
-
-        try {
-            const stream = session.promptStreaming(prompt);
-            let fullResponse = '';
-
-            for await (const chunk of stream) {
-                fullResponse = chunk;
-                aiOutput.textContent = fullResponse;
-            }
-
-            aiOutput.classList.remove('streaming');
-        } catch (streamError) {
-            // Fall back to non-streaming if streaming isn't supported
-            aiOutput.innerHTML = `<span class="ai-status"><div class="spinner"></div> Analyzing with Gemini Nano...</span>`;
-            
-            try {
-                const response = await session.prompt(prompt);
-                aiOutput.textContent = response;
-            } catch (promptError) {
-                aiOutput.innerHTML = `<div class="ai-unavailable">AI analysis could not complete. The on-device model may need more time to initialize. Try scanning again.</div>`;
-            }
+async function getBuiltInAI() {
+    try {
+        if (typeof chrome !== "undefined" && chrome.aiOriginTrial && chrome.aiOriginTrial.languageModel) {
+            const caps = await chrome.aiOriginTrial.languageModel.capabilities();
+            if (caps.available !== "no") return chrome.aiOriginTrial.languageModel;
         }
+    } catch(e) {}
+    try {
+        if (typeof self !== "undefined" && self.ai && self.ai.languageModel) {
+            const caps = await self.ai.languageModel.capabilities();
+            if (caps.available !== "no") return self.ai.languageModel;
+        }
+    } catch(e) {}
+    try {
+        if (typeof window !== "undefined" && window.ai && window.ai.languageModel) {
+            const caps = await window.ai.languageModel.capabilities();
+            if (caps.available !== "no") return window.ai.languageModel;
+        }
+    } catch(e) {}
+    return null;
+}
 
-        // Clean up the session
-        session.destroy();
+async function runWithBuiltInAI(aiApi, prompt, aiOutput) {
+    document.getElementById("aiBadge").textContent = "ON-DEVICE";
+    aiOutput.innerHTML = `<span class="ai-status"><div class="spinner"></div> Initializing Gemini Nano...</span>`;
 
-    } catch (error) {
-        console.error('AI Analysis error:', error);
-        aiConsole.style.display = "block";
-        aiOutput.innerHTML = `<div class="ai-unavailable">
-            AI analysis encountered an error. Make sure Chrome's built-in AI is enabled:<br>
-            Open <strong>chrome://flags/#prompt-api-for-gemini-nano</strong> → Set to <strong>Enabled</strong> → Restart Chrome
-        </div>`;
+    const session = await aiApi.create({
+        monitor(m) {
+            m.addEventListener("downloadprogress", (e) => {
+                const pct = Math.round((e.loaded / e.total) * 100);
+                aiOutput.innerHTML = `<span class="ai-status"><div class="spinner"></div> Downloading AI model: ${pct}%</span>`;
+            });
+        },
+        initialPrompts: [{ role: "system", content: AI_SYSTEM_PROMPT }]
+    });
+
+    aiOutput.innerHTML = "";
+    aiOutput.classList.add("streaming");
+
+    try {
+        const stream = session.promptStreaming(prompt);
+        for await (const chunk of stream) {
+            aiOutput.textContent = chunk;
+        }
+    } catch (e) {
+        const response = await session.prompt(prompt);
+        aiOutput.textContent = response;
     }
+
+    aiOutput.classList.remove("streaming");
+    session.destroy();
+}
+
+async function runWithGeminiAPI(apiKey, prompt, aiOutput) {
+    document.getElementById("aiBadge").textContent = "GEMINI API";
+    aiOutput.innerHTML = `<span class="ai-status"><div class="spinner"></div> Analyzing with Gemini...</span>`;
+
+    const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                system_instruction: { parts: [{ text: AI_SYSTEM_PROMPT }] },
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                    temperature: 0.3,
+                    maxOutputTokens: 300
+                }
+            })
+        }
+    );
+
+    if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        const errMsg = errData?.error?.message || `HTTP ${response.status}`;
+        throw new Error(errMsg);
+    }
+
+    const data = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!text) throw new Error("Empty response from Gemini API");
+
+    // Simulate typing effect
+    aiOutput.innerHTML = "";
+    aiOutput.classList.add("streaming");
+    
+    let i = 0;
+    await new Promise((resolve) => {
+        const typeTimer = setInterval(() => {
+            i += 3;
+            aiOutput.textContent = text.substring(0, i);
+            if (i >= text.length) {
+                clearInterval(typeTimer);
+                aiOutput.textContent = text;
+                resolve();
+            }
+        }, 10);
+    });
+
+    aiOutput.classList.remove("streaming");
+}
+
+async function runAIAnalysis(jobText, heuristicScore, heuristicFlags, companyName) {
+    const aiConsole = document.getElementById("aiConsole");
+    const aiOutput = document.getElementById("aiOutput");
+
+    if (!jobText || jobText.trim().length < 50) return;
+
+    const prompt = buildPrompt(jobText, heuristicScore, heuristicFlags, companyName);
+
+    // ── Try 1: Chrome Built-in AI ──
+    const builtInAI = await getBuiltInAI();
+    if (builtInAI) {
+        try {
+            aiConsole.style.display = "block";
+            await runWithBuiltInAI(builtInAI, prompt, aiOutput);
+            return;
+        } catch (e) {
+            console.warn("Built-in AI failed, trying Gemini API:", e);
+        }
+    }
+
+    // ── Try 2: Gemini API (free tier) ──
+    try {
+        const result = await chrome.storage.local.get(["geminiApiKey"]);
+        const apiKey = result.geminiApiKey;
+
+        if (apiKey) {
+            aiConsole.style.display = "block";
+            await runWithGeminiAPI(apiKey, prompt, aiOutput);
+            return;
+        }
+    } catch (e) {
+        console.warn("Gemini API storage error:", e);
+    }
+
+    // ── No AI available — show setup hint ──
+    aiConsole.style.display = "block";
+    aiOutput.innerHTML = `<div class="ai-unavailable">
+        Add a free Gemini API key in ⚙ AI Settings below to enable AI-powered analysis. No credit card needed.
+    </div>`;
 }
